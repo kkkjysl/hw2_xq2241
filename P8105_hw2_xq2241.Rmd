@@ -1,0 +1,202 @@
+---
+title: "p8105_hw2_xq2241"
+author: "Xinghao Qiao"
+date: 2024-09-28
+output: github_document
+---
+
+
+# Question 1
+
+First, we import the dataset in R markdown.
+```{r setup}
+library(tidyr)
+library(dplyr)
+library(readr)
+library(readxl)
+library(stringr)
+ny_transit<- read_csv ("NYC_Transit_Subway_Entrance_And_Exit_Data.csv")
+```
+Then, we can clean our data
+```{r}
+#data should remain these varaibles
+cleaned_ny <- ny_transit|> select(Line,`Station Name`,`Station Latitude`,`Station Longitude`,starts_with("Route"),Entry,Vending,`Entrance Type`,ADA)
+#convert entry varialbe to logical variable
+cleaned_ny <- cleaned_ny |> mutate(Entry=ifelse(Entry == "YES",T,F))
+#getting dimension of the cleaned data
+summary(cleaned_ny)
+```
+As an overview of this dataset, this dataset contains information related to each entrance and exit for each subway station in NYC, including line, station, name, station latitude / longitude, routes served, entry, vending, entrance type, and ADA compliance. The new dataset contains 1868 rows and 19 columns.To clean the dataset, I retained the revalent variables and converted the entry variable from character (YES vs NO) to a logical variable.Now, I would use the cleaned dataset to answer questions.
+```{r}
+#count the number of stations
+distinct_station<-cleaned_ny|>distinct(`Station Name`,Line)|>nrow()
+distinct_station
+#count ADA compliant
+ada_c<-cleaned_ny|>filter(ADA == TRUE)|> nrow()
+ada_c
+#calculate proportion of station entrances / exits without vending allow entrance
+no_vd_entry<-cleaned_ny|>filter(Vending == "NO",Entry==T)|> nrow()
+no_vd<-cleaned_ny|>filter(Vending == "NO")|>nrow()
+prop<-no_vd_entry/no_vd
+prop
+```
+So, based on our cleaned data, there are 465 distinct stations,468 ADA compliant stations and proportion of station entrances / exits without vending allow entrance is 37.7%.
+
+Then, I would reformat data so that route number and route name are distinct variables.
+```{r}
+r_data<-cleaned_ny|>mutate(across(starts_with("Route"), as.character))|> pivot_longer(cols=starts_with("Route"),names_to="Route.Number",values_to = "Route.Name")|>filter(!is.na(Route.Name))
+```
+Now, we can answer the question with new dataset.
+```{r}
+#count distinct stations serve the A train
+sta_A<-r_data|>filter(Route.Name == "A")|> distinct(`Station Name`,Line)|> nrow()
+sta_A
+#count ADA compliant of station(serve A)
+ada_a<-r_data|>filter(Route.Name == "A", ADA == TRUE)|> distinct(`Station Name`,Line)|>nrow()
+ada_a
+```
+So,after reformating the dataset, there are 60 distinct stations serve the A train and 17 ADA compliant stations serving the train A.
+
+# Question 2
+First, we import the dataset
+```{r}
+mr_trash<-read_excel("202309 Trash Wheel Collection Data.xlsx", 
+    sheet = "Mr. Trash Wheel")
+pro_trash<-read_excel("202309 Trash Wheel Collection Data.xlsx", 
+    sheet = "Professor Trash Wheel")
+gwy<-read_excel("202309 Trash Wheel Collection Data.xlsx", 
+    sheet = "Gwynnda Trash Wheel")
+```
+Then, we can clean these three datasets and combine them together.
+```{r}
+#mr. trash wheel
+cleaned_mr_trash<- mr_trash|> mutate(Wheel = "mr_trash")|>
+  filter(!is.na(Dumpster))|>
+  mutate(`Sports Balls`=as.integer(round(`Sports Balls`,0)))
+#professor trash wheel
+cleaned_pro_trash<- pro_trash|> mutate(Wheel = "pro_trash")|>
+  filter(!is.na(Dumpster))
+#gwynnda trash wheel
+cleaned_gwy_trash<- gwy|> mutate(Wheel = "gwy_trash")|>
+  filter(!is.na(Dumpster))
+#combine
+cleaned_mr_trash <- cleaned_mr_trash |>
+  mutate(Year = as.numeric(Year))
+
+cleaned_pro_trash <- cleaned_pro_trash |>
+  mutate(Year = as.numeric(Year))
+
+cleaned_gwy_trash <- cleaned_gwy_trash |>
+  mutate(Year = as.numeric(Year))
+
+combined_data<-bind_rows(cleaned_mr_trash,cleaned_pro_trash,cleaned_gwy_trash)
+```
+Now,we can use combined data to answer questions.
+```{r}
+#number of observations
+num_observations <- nrow(combined_data)
+num_observations
+#the total weight of trash collected by Professor Trash Wheel
+pro_weight <- combined_data |>
+  filter(Wheel == "pro_trash") |>
+  summarise(Total_Weight = sum(`Weight (tons)`, na.rm =TRUE))|>pull(Total_Weight)
+pro_weight
+#the total number of cigarette butts collected by Gwynnda in June of 2022
+total_cig_gwy <- combined_data |>
+  filter(Wheel == "gwy_trash", Month == "June", Year == 2022) |>
+  summarise(Total_Cigarette = sum(`Cigarette Butts`, na.rm = TRUE)) |>
+  pull(Total_Cigarette)
+total_cig_gwy
+```
+So,there are 845 observations in the combined dataset, the total weight of trash collected by Professor Trash Wheel is 216.26 tons and the total number of cigarette butts collected by Gwynnda in June of 2022 is 18120.
+
+# Question 3
+
+```{r}
+#import the datasets
+bakers <- read_csv("gbb_datasets/bakers.csv")
+bakes <- read_csv("gbb_datasets/bakes.csv")
+results <- read_csv("gbb_datasets/results.csv",skip = 2)
+viewers <- read_csv("gbb_datasets/viewers.csv")
+
+# Check for completeness and missing data
+bakers <- bakers |>
+  mutate(Baker_First_Name = sub(" .*", "", `Baker Name`))
+bakes <- bakes |>
+  mutate(Baker = gsub('\"', '', Baker)) 
+
+bb<-anti_join(bakes, bakers, by = c("Baker" = "Baker_First_Name"))
+bb
+cc<-anti_join(results, bakers, by = c("baker" = "Baker_First_Name"))
+cc
+```
+By comparing these three tables ('bakes','bakers','results'), I can make sure that "Jo" in bakes, Jo Wheatley in bakers and Joanne in results are the same person. So, I would rename this person as Jo.
+```{r}
+results <- results |>
+  mutate(baker = ifelse(baker == "Joanne", "Jo", baker))
+#sceond check
+cc<-anti_join(results, bakers, by = c("baker" = "Baker_First_Name"))
+cc
+
+print(bakers)
+```
+So, now we can merge the dataset
+```{r}
+merged_data <- bakes |>
+  left_join(bakers, by = c("Baker" = "Baker_First_Name"),relationship = "many-to-many")|>
+  left_join(results, by = c("Baker"="baker"))
+
+final_data <- merged_data |>
+  select(`Baker Name`, `Baker Age`, `Baker Occupation`, Hometown, Episode,Series.x, `Signature Bake`, `Show Stopper`, result, everything())
+
+write_csv(final_data, "final_dataset.csv")
+
+```
+Now, we creat the star baker and winner table
+```{r}
+star_baker_winner_table <- results |>
+  filter(series >= 5 & series <= 10) |>   # episode in Seasons 5 through 10
+  filter(result == "STAR BAKER" | result == "WINNER") |>  
+  select(series, episode, baker, result) |>  
+  arrange(series, episode)  
+
+print(star_baker_winner_table)
+```
+Now, I would like to use frequency table to analyze if there were any predictable overall winners
+
+```{r}
+baker_frequency <- star_baker_winner_table |>
+  group_by(baker) |>
+  summarise(frequency = n()) |> 
+  arrange(desc(frequency))  
+
+print(baker_frequency)
+```
+So, from the frequency table, Richard could be a predictable overall winner.
+
+Now,we use 'viewers' dataset.
+```{r}
+viewers <- read_csv("gbb_datasets/viewers.csv")
+head(viewers, 10)
+```
+```{r}
+#reshape data
+viewers_tidy <- viewers |>
+  pivot_longer(cols = starts_with("Series"), names_to = "Season", values_to = "Viewership")
+```
+Now, we can calculate.
+```{r}
+#average viewership in Season 1
+avg_season1 <- viewers_tidy |>
+  filter(Season == "Series 1") |>
+  summarise(avg_viewers = mean(Viewership, na.rm = TRUE))
+
+# average viewership in Season 5
+avg_season5 <- viewers_tidy |>
+  filter(Season == "Series 5") |>
+  summarise(avg_viewers = mean(Viewership, na.rm = TRUE))
+
+avg_season1
+avg_season5
+```
+From the output, we have the average viewership in Season 1 is 2.77 and the average viewership in Season 5 is 10.0393.
